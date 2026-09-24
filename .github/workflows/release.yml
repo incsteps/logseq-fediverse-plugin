@@ -23,7 +23,10 @@ jobs:
 
       - name: Create Zip Archive
         run: |
-          zip -r package.zip dist/ package.json README.md LICENSE
+          cp README.md dist/ 2>/dev/null || true
+          cp LICENSE dist/ 2>/dev/null || true
+          cd dist
+          zip -r ../package.zip .
 
       - name: Release
         uses: softprops/action-gh-release@v1
