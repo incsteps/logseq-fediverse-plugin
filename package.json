@@ -6,7 +6,7 @@
   "logseq": {
     "id": "logseq-fediverse-plugin",
     "title": "Fediverse Integration",
-    "icon": "share"
+    "icon": "./icon.png"
   },
   "scripts": {
     "dev": "vite",

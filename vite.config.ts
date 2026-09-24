@@ -22,6 +22,9 @@ export default defineConfig({
                     path.resolve(__dirname, 'dist/package.json'),
                     JSON.stringify(pkg, null, 2)
                 );
+                if (fs.existsSync('icon.png')) {
+                    fs.copyFileSync('icon.png', path.resolve(__dirname, 'dist/icon.png'));
+                }
             },
         },
     ],
