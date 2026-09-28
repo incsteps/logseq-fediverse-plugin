@@ -49,35 +49,6 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
     return chunks;
 }
 
-async function publishBlockContent(content: string, blockUuid: string) {
-    const instanceUrl = logseq.settings?.instanceUrl as string;
-    const token = logseq.settings?.accessToken as string;
-
-    if (!instanceUrl || !token) {
-        logseq.UI.showMsg('Please configure Instance URL and Access Token first', 'error');
-        logseq.showSettingsUI();
-        return;
-    }
-
-    const cleanedText = content.replace(/\/Fediverse: Publish/gi, '').trim();
-
-    if (!cleanedText) {
-        logseq.UI.showMsg('Cannot publish an empty block', 'warning');
-        return;
-    }
-
-    try {
-        logseq.UI.showMsg('Publishing to Fediverse...', 'info');
-        const api = new FediverseApi(instanceUrl, token);
-        const result = await api.postStatus(cleanedText);
-
-        await logseq.Editor.upsertBlockProperty(blockUuid, 'fediverse-url', result.url);
-        logseq.UI.showMsg('Status published successfully!', 'success');
-    } catch (err: any) {
-        console.error('Publish error:', err);
-        logseq.UI.showMsg(`Error publishing: ${err.message}`, 'error');
-    }
-}
 
 async function importStatusToGraph() {
     const instanceUrl = logseq.settings?.instanceUrl as string;
@@ -144,7 +115,11 @@ async function prepareThreadPayloads(
 
     async function processBlock(b: any) {
         let content = b.content || '';
-        content = content.replace(/\/Fediverse: Publish Thread/gi, '').trim();
+        content = content.trim();
+
+        content = content
+            .replace(/^fediverse-thread::.*$/gm, '')
+            .trim();
 
         if (content) {
             const imageRegex = /!\[.*?\]\((.*?)\)/g;
@@ -171,27 +146,53 @@ async function prepareThreadPayloads(
 
     await processBlock(block);
 
-    // Transform raw nodes into maxChars-compliant TootPayloads
     const finalPayloads: TootPayload[] = [];
+    let currentText = '';
+    let currentImages: string[] = [];
+
+    const flushBuffer = () => {
+        if (currentText || currentImages.length > 0) {
+            finalPayloads.push({
+                text: currentText,
+                imageUrls: currentImages,
+            });
+            currentText = '';
+            currentImages = [];
+        }
+    };
 
     for (const node of rawNodes) {
-        if (!node.text) {
-            // Block only contained images
-            finalPayloads.push({ text: '', imageUrls: node.imageUrls });
+        if (node.text === '---') {
+            flushBuffer();
             continue;
         }
 
-        const textChunks = splitTextIntoChunks(node.text, maxChars);
+        if (node.text.length > maxChars) {
+            flushBuffer();
 
-        textChunks.forEach((chunk, index) => {
-            // Attach images to the FIRST chunk of this block
-            const imagesForThisChunk = index === 0 ? node.imageUrls : [];
-            finalPayloads.push({
-                text: chunk,
-                imageUrls: imagesForThisChunk,
+            const chunks = splitTextIntoChunks(node.text, maxChars);
+            chunks.forEach((chunk, index) => {
+                finalPayloads.push({
+                    text: chunk,
+                    imageUrls: index === 0 ? node.imageUrls : [],
+                });
             });
-        });
+            continue;
+        }
+
+        const separator = currentText ? '\n' : '';
+        const potentialText = currentText + separator + node.text;
+
+        if (potentialText.length <= maxChars) {
+            currentText = potentialText;
+            currentImages.push(...node.imageUrls);
+        } else {
+            flushBuffer();
+            currentText = node.text;
+            currentImages.push(...node.imageUrls);
+        }
     }
+    flushBuffer();
 
     return finalPayloads;
 }
@@ -222,7 +223,7 @@ async function publishThread(rootBlockUuid: string) {
 
         for (let i = 0; i < payloads.length; i++) {
             const payload = payloads[i];
-            logseq.UI.showMsg(`Publishing toot ${i + 1} of ${payloads.length}... ${payload.text}`, 'info');
+            logseq.UI.showMsg(`Publishing toot ${i + 1} of ${payloads.length}... ${payload.text}`, 'info', {timeout: 5000});
 
             // Upload media attached to this specific chunk/block
             const mediaIds: string[] = [];
@@ -245,8 +246,7 @@ async function publishThread(rootBlockUuid: string) {
                 }
             }
 
-            // Post toot linked to previous status ID
-            const result = await api.postStatusInThread(payload.text, lastStatusId, mediaIds);
+            const result = await api.postStatus(`${payload.text}\n${i+1}/${payloads.length}`, lastStatusId, mediaIds);
 
             if (!lastStatusId) {
                 rootStatusUrl = result.url;
@@ -273,27 +273,12 @@ function main() {
         logseq.showSettingsUI();
     });
 
-    logseq.Editor.registerSlashCommand('Fediverse: Publish', async () => {
-        const block = await logseq.Editor.getCurrentBlock();
-        if (block) {
-            await publishBlockContent(block.content, block.uuid);
-        }
-    });
-
     logseq.Editor.registerSlashCommand('Fediverse: Import', async () => {
         await importStatusToGraph();
     });
 
-    // Block context menu item
-    logseq.Editor.registerBlockContextMenuItem('Publish to Fediverse', async (e) => {
+    logseq.Editor.registerBlockContextMenuItem('Fediverse: Publish', async (e) => {
         const block = await logseq.Editor.getBlock(e.uuid);
-        if (block) {
-            await publishBlockContent(block.content, block.uuid);
-        }
-    });
-
-    logseq.Editor.registerSlashCommand('Fediverse: Publish Thread', async () => {
-        const block = await logseq.Editor.getCurrentBlock();
         if (block) {
             await publishThread(block.uuid);
         }

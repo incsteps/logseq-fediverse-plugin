@@ -33,21 +33,6 @@ export class FediverseApi {
         };
     }
 
-    // POST /api/v1/statuses
-    async postStatus(statusText: string): Promise<StatusResponse> {
-        const response = await fetch(`${this.instanceUrl}/api/v1/statuses`, {
-            method: 'POST',
-            headers: this.headers,
-            body: JSON.stringify({ status: statusText }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-
-        return response.json();
-    }
 
     // GET /api/v2/search?q={url}&type=statuses&resolve=true
     async resolveStatusUrl(statusUrl: string): Promise<StatusResponse> {
@@ -102,7 +87,7 @@ export class FediverseApi {
         return response.json();
     }
 
-    async postStatusInThread(
+    async postStatus(
         statusText: string,
         replyToId?: string,
         mediaIds: string[] = []
