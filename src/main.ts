@@ -210,7 +210,7 @@ async function publishThread(rootBlockUuid: string) {
         const api = new FediverseApi(instanceUrl, token);
         const maxChars = await api.getMaxCharacters();
 
-        logseq.UI.showMsg(`Reading blocks and checking limits (${maxChars} chars max per toot)...`, 'info');
+        console.log(`Reading blocks and checking limits (${maxChars} chars max per toot)...`);
 
         const payloads = await prepareThreadPayloads(rootBlockUuid, maxChars);
         if (payloads.length === 0) {
@@ -223,7 +223,7 @@ async function publishThread(rootBlockUuid: string) {
 
         for (let i = 0; i < payloads.length; i++) {
             const payload = payloads[i];
-            logseq.UI.showMsg(`Publishing toot ${i + 1} of ${payloads.length}... ${payload.text}`, 'info', {timeout: 5000});
+            console.log(`Publishing toot ${i + 1} of ${payloads.length}... ${payload.text}`);
 
             // Upload media attached to this specific chunk/block
             const mediaIds: string[] = [];
